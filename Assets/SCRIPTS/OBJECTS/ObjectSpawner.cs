@@ -13,8 +13,6 @@ public class ObjectSpawner : MonoBehaviour
     public Vector2 burgerSpawnRateRange = new Vector2(3f, 8f);     // Min/Max time between burger spawns
     public Vector2 obstacleSpawnRateRange = new Vector2(1f, 4f);  // Min/Max time between obstacle spawns
 
-    public Transform[] spawnPoints; // Empty GameObjects defining where items can spawn (usually just X, Z fixed, Y varies by lane)
-                                   // For this game, we only need one spawn point X,Z and vary Y based on lanes.
     public float spawnXPosition = 15f; // X position where objects will spawn (off-screen right)
 
     private Coroutine _heartSpawnCoroutine;
@@ -24,14 +22,34 @@ public class ObjectSpawner : MonoBehaviour
 
     void Awake()
     {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
     }
 
     public void StartSpawning()
     {
         if (_isSpawning) return;
         _isSpawning = true;
+
+        if (LaneManager.Instance == null)
+        {
+            Debug.LogError("ObjectSpawner: LaneManager not found! Cannot determine spawn Y positions.");
+            _isSpawning = false; // Prevent spawning if LaneManager is missing
+            return;
+        }
+        if (LaneManager.Instance.lanePositionsY == null || LaneManager.Instance.lanePositionsY.Length == 0)
+        {
+            Debug.LogError("ObjectSpawner: LaneManager.lanePositionsY is not set up! Cannot determine spawn Y positions.");
+            _isSpawning = false; // Prevent spawning if lanes aren't defined
+            return;
+        }
+
 
         _heartSpawnCoroutine = StartCoroutine(SpawnHeartRoutine());
         _burgerSpawnCoroutine = StartCoroutine(SpawnBurgerRoutine());
@@ -77,17 +95,21 @@ public class ObjectSpawner : MonoBehaviour
 
     void SpawnObject(GameObject prefabToSpawn)
     {
-        if (prefabToSpawn == null || LaneManager.Instance == null)
+        if (prefabToSpawn == null) // LaneManager presence is checked in StartSpawning
         {
-            Debug.LogWarning("Prefab or LaneManager is null. Cannot spawn.");
+            Debug.LogWarning("Prefab is null. Cannot spawn.");
             return;
         }
 
-        int randomLaneIndex = Random.Range(0, 3); // 0, 1, or 2
+        // Get a random lane index
+        int randomLaneIndex = Random.Range(0, LaneManager.Instance.lanePositionsY.Length);
+
+        // Get the Y position for that lane directly from LaneManager
         float spawnYPosition = LaneManager.Instance.GetLaneYPosition(randomLaneIndex);
 
-        Vector3 spawnPosition = new Vector3(spawnXPosition, spawnYPosition, 0f); // Assuming Z is 0 for 2.5D
+        // Combine with the fixed spawnXPosition and a Z of 0
+        Vector3 spawnPosition = new Vector3(spawnXPosition, spawnYPosition, 0f);
 
-        Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity, transform); // Spawn as child of spawner
+        Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity, transform); // Spawn as child of this spawner object
     }
 }

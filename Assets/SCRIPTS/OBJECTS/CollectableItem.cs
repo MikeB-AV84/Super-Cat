@@ -7,7 +7,7 @@ public class CollectableItem : MonoBehaviour
     public ItemType itemType;
     public int value = 1; // For hearts, it's 1 health. For burgers, points (e.g., 50)
 
-    void OnTriggerEnter(Collider other) // Or OnTriggerEnter2D if using 2D colliders
+    void OnTriggerEnter2D(Collider2D other) // Or OnTriggerEnter2D if using 2D colliders
     {
         if (other.CompareTag("Player"))
         {

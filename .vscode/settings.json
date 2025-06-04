@@ -56,5 +56,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "Super Cat.sln"
+    "dotnet.defaultSolution": "Super-Cat.sln"
 }

@@ -6,6 +6,7 @@ TagManager:
   tags:
   - BurgerItem
   - HeartItem
+  - Obstacle
   layers:
   - Default
   - TransparentFX

@@ -975,8 +975,8 @@ MonoBehaviour:
   burgerSpawnRateRange: {x: 3, y: 8}
   obstacleSpawnRateRange: {x: 1, y: 4}
   spawnXPosition: 12
-  minTimeBetweenAnySpawn: 0.2
-  laneSpecificCooldownDuration: 0.5
+  minTimeBetweenAnySpawn: 0.1
+  laneSpecificCooldownDuration: 0.4
 --- !u!4 &741618177
 Transform:
   m_ObjectHideFlags: 0

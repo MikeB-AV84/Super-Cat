@@ -1,81 +1,110 @@
 using UnityEngine;
-using UnityEngine.SceneManagement; // Required for restarting the scene
+using UnityEngine.SceneManagement; // Required for loading scenes
 
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
+    [Header("Game Speed Settings")]
     public float initialGameSpeed = 5f;
     public float speedIncrement = 0.5f;
     public int scoreToIncreaseSpeed = 500;
-    public float maxGameSpeed = 20f; // Optional: Cap the speed
+    public float maxGameSpeed = 20f;
+
+    [Header("Scene Navigation")]
+    public string mainMenuSceneName = "MainMenuScene"; // Ensure this scene is in Build Settings
 
     private float _currentGameSpeed;
     public float CurrentGameSpeed => _currentGameSpeed;
 
     private bool _isGameOver = false;
+    private bool _isPaused = false; // New state for pausing
+    public bool IsPaused => _isPaused; // Public getter
+
     private int _lastSpeedIncreaseScore = 0;
 
-    public UIManager uiManager; // Assign in Inspector
+    public UIManager uiManager;
 
     void Awake()
     {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        if (Instance == null)
+        {
+            Instance = this;
+            // DontDestroyOnLoad(gameObject); // Optional: if GameManager persists across scenes
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
     }
 
     void Start()
     {
-        if (uiManager == null) Debug.LogError("UIManager not assigned to GameManager!");
-        if (ScoreManager.Instance == null) Debug.LogError("ScoreManager not found!");
-        if (HealthManager.Instance == null) Debug.LogError("HealthManager not found!");
+        if (uiManager == null) Debug.LogError("GameManager: UIManager not assigned in Inspector!", this.gameObject);
+        // Initialize other managers and subscribe to events (as before)
+        if (ScoreManager.Instance == null) Debug.LogError("GameManager: ScoreManager not found!", this.gameObject);
+        if (HealthManager.Instance == null) Debug.LogError("GameManager: HealthManager not found!", this.gameObject);
 
-        // Subscribe to events
-        ScoreManager.Instance.OnScoreChanged += HandleScoreChanged;
-        HealthManager.Instance.OnPlayerDied += HandlePlayerDied;
+        if (ScoreManager.Instance != null) ScoreManager.Instance.OnScoreChanged += HandleScoreChanged;
+        if (HealthManager.Instance != null) HealthManager.Instance.OnPlayerDied += HandlePlayerDied;
+
+        // Ensure game is not paused at start (Time.timeScale might persist from editor or previous scene if not reset)
+        Time.timeScale = 1f;
+        _isPaused = false; // Explicitly set paused to false
+        uiManager?.SetPauseMenu(false); // Ensure pause menu is hidden
 
         StartGame();
     }
 
-    void OnDestroy() // Unsubscribe when object is destroyed
-    {
-        if (ScoreManager.Instance != null) ScoreManager.Instance.OnScoreChanged -= HandleScoreChanged;
-        if (HealthManager.Instance != null) HealthManager.Instance.OnPlayerDied -= HandlePlayerDied;
-    }
-
-
-    public void StartGame()
-    {
-        _isGameOver = false;
-        _currentGameSpeed = initialGameSpeed;
-        _lastSpeedIncreaseScore = 0;
-
-        Time.timeScale = 1f; // Ensure game is running
-
-        // Reset managers (they should have their own reset methods)
-        HealthManager.Instance?.ResetHealth();
-        ScoreManager.Instance?.ResetScore();
-
-        uiManager?.HideGameOverScreen();
-        uiManager?.UpdateScore(0); // Ensure UI is correct at start
-        uiManager?.UpdateHearts(HealthManager.Instance.maxHealth);
-
-        // Tell Spawner to start spawning (Spawner script will handle its own logic)
-        ObjectSpawner.Instance?.StartSpawning();
-    }
-
     void Update()
     {
+        // Handle Pause Input
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            // Don't allow pausing if game is already over
+            if (!_isGameOver)
+            {
+                TogglePauseGame();
+            }
+        }
+
+        // Handle Restart Input (only if game is over)
         if (_isGameOver && Input.GetKeyDown(KeyCode.Space))
         {
             RestartGame();
         }
     }
 
+    void OnDestroy()
+    {
+        // Unsubscribe from events
+        if (ScoreManager.Instance != null) ScoreManager.Instance.OnScoreChanged -= HandleScoreChanged;
+        if (HealthManager.Instance != null) HealthManager.Instance.OnPlayerDied -= HandlePlayerDied;
+    }
+
+    public void StartGame()
+    {
+        _isGameOver = false;
+        // _isPaused should already be false here from Start() or TogglePauseGame()
+        _currentGameSpeed = initialGameSpeed;
+        _lastSpeedIncreaseScore = 0;
+
+        Time.timeScale = 1f; // Ensure game is running
+
+        HealthManager.Instance?.ResetHealth();
+        ScoreManager.Instance?.ResetScore();
+
+        uiManager?.HideGameOverScreen();
+        uiManager?.SetPauseMenu(false); // Ensure pause menu is hidden at game start/restart
+        if (ScoreManager.Instance != null) uiManager?.UpdateScore(ScoreManager.Instance.CurrentScore);
+        if (HealthManager.Instance != null) uiManager?.UpdateHearts(HealthManager.Instance.maxHealth);
+
+        ObjectSpawner.Instance?.StartSpawning();
+    }
+
     void HandleScoreChanged(int newScore)
     {
-        uiManager?.UpdateScore(newScore);
-        // Difficulty Scaling
+        if (uiManager != null) uiManager.UpdateScore(newScore);
         if (newScore >= _lastSpeedIncreaseScore + scoreToIncreaseSpeed)
         {
             _lastSpeedIncreaseScore += scoreToIncreaseSpeed;
@@ -86,30 +115,55 @@ public class GameManager : MonoBehaviour
     void IncreaseGameSpeed()
     {
         _currentGameSpeed += speedIncrement;
-        _currentGameSpeed = Mathf.Min(_currentGameSpeed, maxGameSpeed); // Clamp to max speed
-        Debug.Log("Speed Increased to: " + _currentGameSpeed);
-        // Optional: Play sound/visual cue for speed increase
+        _currentGameSpeed = Mathf.Min(_currentGameSpeed, maxGameSpeed);
+        // Debug.Log("Speed Increased to: " + _currentGameSpeed);
     }
 
     void HandlePlayerDied()
     {
         _isGameOver = true;
-        Time.timeScale = 0f; // Pause the game
+        Time.timeScale = 0f; // Pause game on death
         uiManager?.ShowGameOverScreen(ScoreManager.Instance.CurrentScore);
-        Debug.Log("Game Over! Final Score: " + ScoreManager.Instance.CurrentScore);
         ObjectSpawner.Instance?.StopSpawning();
     }
 
     public void RestartGame()
     {
-        Time.timeScale = 1f; // Important: Reset time scale before loading scene
+        Time.timeScale = 1f;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
-        // Note: A more robust restart might involve resetting states without reloading the scene,
-        // but scene reload is simpler for a basic setup.
     }
 
-    public bool IsGameOver()
+    // --- Pause Logic ---
+    public void TogglePauseGame()
     {
-        return _isGameOver;
+        _isPaused = !_isPaused;
+
+        if (_isPaused)
+        {
+            Time.timeScale = 0f; // Freeze game time
+            uiManager?.SetPauseMenu(true);
+            // Optionally disable player input here if not handled by Time.timeScale
+        }
+        else
+        {
+            ResumeGame(); // Call ResumeGame to ensure UI is also handled
+        }
     }
+
+    public void ResumeGame() // Public method for Resume button
+    {
+        _isPaused = false;
+        Time.timeScale = 1f; // Unfreeze game time
+        uiManager?.SetPauseMenu(false);
+        // Optionally re-enable player input if disabled separately
+    }
+
+    public void QuitToMainMenu() // Public method for Quit button
+    {
+        Time.timeScale = 1f; // IMPORTANT: Always reset time scale before loading a new scene
+        _isPaused = false; // Reset pause state
+        SceneManager.LoadScene(mainMenuSceneName);
+    }
+
+    public bool IsGameOver() => _isGameOver;
 }

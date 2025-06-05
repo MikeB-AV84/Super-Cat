@@ -1,6 +1,6 @@
 using UnityEngine;
 using System.Collections;
-using System.Collections.Generic; // Required for using Lists
+using System.Collections.Generic; // Required for Lists
 
 // Ensures an AudioSource component is attached to the same GameObject
 [RequireComponent(typeof(AudioSource))]
@@ -9,106 +9,199 @@ public class SimpleAudioManager : MonoBehaviour
     // This list will be visible in the Inspector, where you can drag your audio clips
     public List<AudioClip> songs = new List<AudioClip>();
 
-    // The AudioSource component that will play the songs
     private AudioSource audioSource;
 
-    // Index to keep track of the current song
-    private int currentSongIndex = 0;
+    // Stores the original indices of songs in the current shuffled play order
+    private List<int> shuffledPlayOrderIndices = new List<int>();
+    // Current position in the shuffledPlayOrderIndices list
+    private int currentShuffledPlaybackIndex = 0;
+
+    // System.Random for shuffling. Initialized once to maintain state.
+    private System.Random rng = new System.Random();
 
     void Start()
     {
-        // Get the AudioSource component attached to this GameObject
         audioSource = GetComponent<AudioSource>();
-
-        // Disable looping on the AudioSource itself, as we're handling the sequence manually
+        // Disable looping on the AudioSource itself, as we're handling the sequence and loop manually
         audioSource.loop = false;
 
-        // Start playing the first song if there are any songs in the list
         if (songs.Count > 0)
         {
-            StartCoroutine(PlaySongQueue());
+            GenerateShuffledPlaylist();
+            StartCoroutine(PlayShuffledQueue());
         }
         else
         {
-            Debug.LogWarning("No songs assigned to the AudioManager.");
+            Debug.LogWarning("[SimpleAudioManager] No songs assigned in the Inspector. Music playback will not start.");
         }
     }
 
-    IEnumerator PlaySongQueue()
+    /// <summary>
+    /// Clears the current play order, populates it with indices from the songs list,
+    /// and then shuffles it using the Fisher-Yates algorithm.
+    /// Resets the playback index to the beginning of the new list.
+    /// </summary>
+    void GenerateShuffledPlaylist()
     {
-        // Infinite loop to keep playing songs
-        while (true)
+        shuffledPlayOrderIndices.Clear();
+        for (int i = 0; i < songs.Count; i++)
         {
-            // Check if there are songs and the index is valid
-            if (songs.Count == 0 || currentSongIndex < 0 || currentSongIndex >= songs.Count)
+            shuffledPlayOrderIndices.Add(i);
+        }
+
+        // Fisher-Yates shuffle algorithm
+        int n = shuffledPlayOrderIndices.Count;
+        while (n > 1)
+        {
+            n--;
+            int k = rng.Next(n + 1); // Generates a random integer k such that 0 <= k <= n.
+            // Swap elements
+            int tempValue = shuffledPlayOrderIndices[k];
+            shuffledPlayOrderIndices[k] = shuffledPlayOrderIndices[n];
+            shuffledPlayOrderIndices[n] = tempValue;
+        }
+        currentShuffledPlaybackIndex = 0; // Reset to the start of the new shuffled list
+        // Uncomment to see the new shuffle order in console:
+        // Debug.Log("[SimpleAudioManager] Playlist shuffled. New order: " + string.Join(", ", shuffledPlayOrderIndices.ConvertAll(i => i.ToString())));
+    }
+
+    /// <summary>
+    /// Coroutine that plays songs from the shuffled list one after another.
+    /// When the list ends, it re-shuffles and continues.
+    /// </summary>
+    IEnumerator PlayShuffledQueue()
+    {
+        while (true) // Loop indefinitely to keep music playing
+        {
+            if (songs.Count == 0)
             {
-                Debug.LogWarning("Song list is empty or index is out of bounds. Stopping playback.");
-                yield break; // Exit the coroutine if something is wrong
+                Debug.LogWarning("[SimpleAudioManager] Song list is empty. Halting playback coroutine.");
+                yield break; // Exit coroutine if no songs are available
             }
 
-            // Assign the current song to the AudioSource
-            audioSource.clip = songs[currentSongIndex];
+            // Check if we've played all songs in the current shuffled sequence
+            if (currentShuffledPlaybackIndex >= shuffledPlayOrderIndices.Count)
+            {
+                if (songs.Count > 0) // Ensure there are songs before trying to re-shuffle
+                {
+                    // Debug.Log("[SimpleAudioManager] Current shuffled playlist ended. Generating a new one.");
+                    GenerateShuffledPlaylist(); // Re-shuffle and reset index
+                }
+                else 
+                {
+                     Debug.LogWarning("[SimpleAudioManager] Song list became empty during playback. Halting playback.");
+                     yield break;
+                }
+            }
+            
+            // Get the actual song index from our shuffled list
+            int songOriginalIndex = shuffledPlayOrderIndices[currentShuffledPlaybackIndex];
 
-            // Play the song
+            // Safety check for the song index (should generally be fine if GenerateShuffledPlaylist is correct)
+            if (songOriginalIndex < 0 || songOriginalIndex >= songs.Count) {
+                Debug.LogError($"[SimpleAudioManager] Corrupted shuffled playlist: index {songOriginalIndex} is out of bounds for songs list (count: {songs.Count}). Attempting to recover by re-shuffling.");
+                if (songs.Count > 0) {
+                    GenerateShuffledPlaylist();
+                    if (shuffledPlayOrderIndices.Count == 0 || currentShuffledPlaybackIndex >= shuffledPlayOrderIndices.Count || 
+                        (shuffledPlayOrderIndices.Count > 0 && (shuffledPlayOrderIndices[currentShuffledPlaybackIndex] < 0 || shuffledPlayOrderIndices[currentShuffledPlaybackIndex] >= songs.Count))) {
+                         Debug.LogError("[SimpleAudioManager] Failed to recover from corrupted playlist after re-shuffle. Halting playback.");
+                         yield break;
+                    }
+                    songOriginalIndex = shuffledPlayOrderIndices[currentShuffledPlaybackIndex]; 
+                } else {
+                     Debug.LogError("[SimpleAudioManager] Songs list is empty, cannot recover from corrupted playlist. Halting playback.");
+                     yield break;
+                }
+            }
+
+            audioSource.clip = songs[songOriginalIndex];
+            // Debug.Log($"[SimpleAudioManager] Now Playing (Shuffle #{currentShuffledPlaybackIndex + 1}/{shuffledPlayOrderIndices.Count}): {audioSource.clip.name} (Original Index: {songOriginalIndex})");
             audioSource.Play();
 
-            // Wait until the current song has finished playing
-            // We add a small buffer (0.1f) just in case 'isPlaying' becomes false slightly too early
-            while (audioSource.isPlaying || audioSource.time < audioSource.clip.length - 0.1f)
+            // Wait until the current song has finished playing.
+            // The audioSource.clip != null check is a good safety measure.
+            while (audioSource.isPlaying || (audioSource.clip != null && audioSource.time < audioSource.clip.length - 0.1f))
             {
                 yield return null; // Wait for the next frame
             }
 
-            // Move to the next song
-            currentSongIndex++;
-
-            // If we've reached the end of the list, loop back to the first song
-            if (currentSongIndex >= songs.Count)
-            {
-                currentSongIndex = 0;
-            }
+            currentShuffledPlaybackIndex++; // Advance to the next song in the shuffled list
         }
     }
 
-    // Optional: Public method to manually skip to the next song
+    /// <summary>
+    /// Stops the current song and plays the next song in the shuffled sequence.
+    /// If at the end of the sequence, a new shuffled sequence is generated.
+    /// </summary>
     public void SkipToNextSong()
     {
-        if (songs.Count == 0) return;
-
-        // Stop the current song
-        audioSource.Stop();
-
-        // Increment index and loop
-        currentSongIndex++;
-        if (currentSongIndex >= songs.Count)
+        if (songs.Count == 0)
         {
-            currentSongIndex = 0;
-        }
-
-        // Restart the coroutine to play from the new current song
-        // This involves stopping any existing PlaySongQueue coroutine first
-        StopCoroutine("PlaySongQueue"); // Stop by string name
-        if (songs.Count > 0)
-        {
-            StartCoroutine(PlaySongQueue());
-        }
-    }
-
-    // Optional: Public method to play a specific song by index
-    public void PlaySongAtIndex(int songIndex)
-    {
-        if (songIndex < 0 || songIndex >= songs.Count)
-        {
-            Debug.LogWarning("Invalid song index: " + songIndex);
+            Debug.LogWarning("[SimpleAudioManager] No songs available to skip to.");
             return;
         }
+        if (!gameObject.activeInHierarchy) return; // Don't operate if GameObject is not active
 
         audioSource.Stop();
-        currentSongIndex = songIndex;
-        StopCoroutine("PlaySongQueue");
-         if (songs.Count > 0)
+
+        // Stop the current playback coroutine.
+        StopCoroutine("PlayShuffledQueue"); 
+        
+        currentShuffledPlaybackIndex++; // Advance index. PlayShuffledQueue will handle re-shuffling if it goes out of bounds.
+
+        // Restart the coroutine. It will pick up from the new index or re-shuffle.
+        StartCoroutine(PlayShuffledQueue());
+        // Debug.Log("[SimpleAudioManager] Skipped to next song.");
+    }
+
+    /// <summary>
+    /// Stops current playback, plays the song at the specified original index,
+    /// and then resumes shuffled playback with a new shuffle.
+    /// </summary>
+    /// <param name="songIndexInOriginalList">The index of the song in the public 'songs' list.</param>
+    public void PlaySongAtIndex(int songIndexInOriginalList)
+    {
+        if (songIndexInOriginalList < 0 || songIndexInOriginalList >= songs.Count)
         {
-            StartCoroutine(PlaySongQueue());
+            Debug.LogWarning($"[SimpleAudioManager] Invalid song index requested: {songIndexInOriginalList}. Total songs: {songs.Count}");
+            return;
+        }
+        if (!gameObject.activeInHierarchy) return;
+
+        StopCoroutine("PlayShuffledQueue"); // Stop the main shuffled queue
+        if(audioSource.isPlaying) audioSource.Stop();
+
+        // Play the specifically requested song
+        AudioClip specificClip = songs[songIndexInOriginalList];
+        audioSource.clip = specificClip;
+        // Debug.Log($"[SimpleAudioManager] Playing specific song (Original Index: {songIndexInOriginalList}): {specificClip.name}");
+        audioSource.Play();
+
+        // Start a new coroutine to wait for this specific song to finish, 
+        // then resume the main shuffle with a new playlist.
+        StartCoroutine(ResumeShuffleAfterSpecificSong(specificClip));
+    }
+
+    /// <summary>
+    /// Waits for a specifically played clip to finish, then generates a new
+    /// shuffled playlist and restarts the main playback queue.
+    /// </summary>
+    /// <param name="specificallyPlayedClip">The AudioClip that was played out of sequence.</param>
+    IEnumerator ResumeShuffleAfterSpecificSong(AudioClip specificallyPlayedClip)
+    {
+        // Wait for the specifically chosen song to finish playing.
+        // Ensure audioSource.clip hasn't changed to something else while waiting.
+        while (audioSource.isPlaying && audioSource.clip == specificallyPlayedClip)
+        {
+            yield return null;
+        }
+
+        // Debug.Log($"[SimpleAudioManager] Specific song '{specificallyPlayedClip.name}' finished. Resuming shuffled playback with a new shuffle.");
+        
+        if (songs.Count > 0 && gameObject.activeInHierarchy)
+        {
+            GenerateShuffledPlaylist(); // Create a fresh shuffle
+            StartCoroutine(PlayShuffledQueue()); // Restart the main queue
         }
     }
 }

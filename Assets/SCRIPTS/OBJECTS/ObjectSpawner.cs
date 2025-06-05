@@ -37,58 +37,52 @@ public class ObjectSpawner : MonoBehaviour
         {
             Destroy(gameObject);
         }
-        // Initialization of _laneCooldownEndTime array is moved to Start()
+        // _laneCooldownEndTime's initial sizing is now handled in StartSpawning
     }
 
     void Start()
     {
-        // Initialize _laneCooldownEndTime here, as LaneManager.Instance and its properties should be set.
-        if (LaneManager.Instance != null &&
-            LaneManager.Instance.lanePositionsY != null &&
-            LaneManager.Instance.lanePositionsY.Length > 0)
-        {
-            _laneCooldownEndTime = new float[LaneManager.Instance.lanePositionsY.Length];
-        }
-        else
-        {
-            // This log indicates a problem with LaneManager setup or access timing.
-            Debug.LogError("ObjectSpawner (Start): LaneManager or its lanePositionsY not initialized correctly! Spacing logic might be impaired. Defaulting to 3 lanes for cooldown array.", this.gameObject);
-            _laneCooldownEndTime = new float[3]; // Fallback if LaneManager isn't ready
-        }
-
-        // Note: StartSpawning() is typically called by GameManager after this Start() method.
-        // The actual values in _laneCooldownEndTime are set within StartSpawning().
+        // This Start method can be used for other initializations for ObjectSpawner
+        // but we are no longer sizing _laneCooldownEndTime here to avoid race conditions
+        // with GameManager calling StartSpawning.
     }
 
     public void StartSpawning()
     {
-        if (_isSpawning) return;
-        
+        if (_isSpawning) return; // Don't start if already spawning
 
+        // Critical check for LaneManager before proceeding
         if (LaneManager.Instance == null ||
             LaneManager.Instance.lanePositionsY == null ||
             LaneManager.Instance.lanePositionsY.Length == 0)
         {
-            Debug.LogError("ObjectSpawner (StartSpawning): LaneManager critical error. Cannot start spawning.", this.gameObject);
+            Debug.LogError("ObjectSpawner (StartSpawning): LaneManager not found or its lanePositionsY not initialized! Cannot start spawning.", this.gameObject);
             _isSpawning = false; // Ensure spawning is flagged as off
             return;
         }
-        
-        // Ensure _laneCooldownEndTime array is initialized (it should be by Start(), but double-check size)
-        if (_laneCooldownEndTime == null || _laneCooldownEndTime.Length != LaneManager.Instance.lanePositionsY.Length)
+
+        // Initialize or Re-initialize _laneCooldownEndTime array's size HERE.
+        // This ensures the array is correctly sized before it's filled,
+        // regardless of Start() execution order.
+        int requiredLaneCount = LaneManager.Instance.lanePositionsY.Length;
+        if (_laneCooldownEndTime == null || _laneCooldownEndTime.Length != requiredLaneCount)
         {
-            Debug.LogWarning("ObjectSpawner (StartSpawning): _laneCooldownEndTime was not correctly sized. Re-initializing array size.", this.gameObject);
-            _laneCooldownEndTime = new float[LaneManager.Instance.lanePositionsY.Length];
+            // This is no longer a "warning" of incorrect sizing, but the point of actual sizing.
+            // It's expected to be null on the very first call.
+            // Debug.Log($"ObjectSpawner (StartSpawning): Initializing/Resizing _laneCooldownEndTime array to size {requiredLaneCount}.", this.gameObject);
+            _laneCooldownEndTime = new float[requiredLaneCount];
         }
 
-        _isSpawning = true; // Set true only if checks pass
-        _lastGlobalSpawnTime = Time.time - minTimeBetweenAnySpawn; // Ensure first spawn isn't blocked
+        _isSpawning = true; // Set spawning to true only if all checks pass and initialization is done
+
+        // Reset cooldowns to ensure lanes are initially free
+        _lastGlobalSpawnTime = Time.time - minTimeBetweenAnySpawn; // Ensure first spawn isn't immediately blocked
         for (int i = 0; i < _laneCooldownEndTime.Length; i++)
         {
-            // Ensure lanes are initially free
-            _laneCooldownEndTime[i] = Time.time - laneSpecificCooldownDuration;
+            _laneCooldownEndTime[i] = Time.time - laneSpecificCooldownDuration; // Ensure lanes are initially free
         }
 
+        // Start the spawning coroutines
         _heartSpawnCoroutine = StartCoroutine(SpawnHeartRoutine());
         _burgerSpawnCoroutine = StartCoroutine(SpawnBurgerRoutine());
         _obstacleSpawnCoroutine = StartCoroutine(SpawnObstacleRoutine());
@@ -133,7 +127,8 @@ public class ObjectSpawner : MonoBehaviour
 
     void TrySpawnObject(GameObject prefabToSpawn)
     {
-        if (!_isSpawning) return; // Added check here
+        // Ensure spawning is active and dependencies are met
+        if (!_isSpawning) return;
 
         if (prefabToSpawn == null)
         {
@@ -141,34 +136,46 @@ public class ObjectSpawner : MonoBehaviour
             return;
         }
 
+        // These checks should ideally not fail here if StartSpawning was successful,
+        // but are good safety measures.
         if (LaneManager.Instance == null || LaneManager.Instance.lanePositionsY == null) {
-            Debug.LogError("ObjectSpawner: LaneManager not available in TrySpawnObject. Cannot spawn.", this.gameObject);
+            Debug.LogError("ObjectSpawner (TrySpawnObject): LaneManager not available. Cannot spawn.", this.gameObject);
+            return;
+        }
+        if (_laneCooldownEndTime == null) {
+            Debug.LogError("ObjectSpawner (TrySpawnObject): _laneCooldownEndTime array is null. Cannot check lane cooldowns.", this.gameObject);
             return;
         }
 
 
+        // 1. Global Cooldown Check
         if (Time.time < _lastGlobalSpawnTime + minTimeBetweenAnySpawn)
         {
-            return; 
+            // Debug.Log($"Global spawn cooldown active. Skipping spawn for {prefabToSpawn.name}");
+            return; // Too soon since the last global spawn
         }
 
         int randomLaneIndex = Random.Range(0, LaneManager.Instance.lanePositionsY.Length);
         
-        // Check if _laneCooldownEndTime has been initialized correctly
-        if (_laneCooldownEndTime == null || randomLaneIndex >= _laneCooldownEndTime.Length) {
-            Debug.LogError($"ObjectSpawner: _laneCooldownEndTime not initialized or index out of bounds. LaneIndex: {randomLaneIndex}, ArrayLength: {(_laneCooldownEndTime == null ? "null" : _laneCooldownEndTime.Length.ToString())}", this.gameObject);
+        // Defensively check array bounds, though length should match lanePositionsY.Length
+        if (randomLaneIndex >= _laneCooldownEndTime.Length) {
+            Debug.LogError($"ObjectSpawner (TrySpawnObject): randomLaneIndex ({randomLaneIndex}) is out of bounds for _laneCooldownEndTime (Length: {_laneCooldownEndTime.Length}). This indicates a mismatch.", this.gameObject);
             return;
         }
 
+        // 2. Lane Specific Cooldown Check
         if (Time.time < _laneCooldownEndTime[randomLaneIndex])
         {
-            return; 
+            // Debug.Log($"Lane {randomLaneIndex} is on cooldown. Skipping spawn for {prefabToSpawn.name}");
+            return; // This specific lane is "busy"
         }
 
+        // All checks passed, proceed to spawn
         float spawnYPosition = LaneManager.Instance.GetLaneYPosition(randomLaneIndex);
         Vector3 spawnPosition = new Vector3(spawnXPosition, spawnYPosition, 0f);
-        Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity, transform);
+        Instantiate(prefabToSpawn, spawnPosition, Quaternion.identity, transform); // Spawn as child of spawner
 
+        // Update cooldown timers
         _lastGlobalSpawnTime = Time.time;
         _laneCooldownEndTime[randomLaneIndex] = Time.time + laneSpecificCooldownDuration;
     }

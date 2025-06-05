@@ -1,5 +1,5 @@
 using UnityEngine;
-using UnityEngine.SceneManagement; // Required for loading scenes
+using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
@@ -12,25 +12,25 @@ public class GameManager : MonoBehaviour
     public float maxGameSpeed = 20f;
 
     [Header("Scene Navigation")]
-    public string mainMenuSceneName = "MainMenuScene"; // Ensure this scene is in Build Settings
+    public string mainMenuSceneName = "MainMenuScene";
 
     private float _currentGameSpeed;
     public float CurrentGameSpeed => _currentGameSpeed;
 
     private bool _isGameOver = false;
-    private bool _isPaused = false; // New state for pausing
-    public bool IsPaused => _isPaused; // Public getter
+    private bool _isPaused = false;
+    public bool IsPaused => _isPaused;
 
     private int _lastSpeedIncreaseScore = 0;
 
     public UIManager uiManager;
+    // No need for public SimpleAudioManager reference if using Singleton
 
     void Awake()
     {
         if (Instance == null)
         {
             Instance = this;
-            // DontDestroyOnLoad(gameObject); // Optional: if GameManager persists across scenes
         }
         else
         {
@@ -41,34 +41,32 @@ public class GameManager : MonoBehaviour
     void Start()
     {
         if (uiManager == null) Debug.LogError("GameManager: UIManager not assigned in Inspector!", this.gameObject);
-        // Initialize other managers and subscribe to events (as before)
         if (ScoreManager.Instance == null) Debug.LogError("GameManager: ScoreManager not found!", this.gameObject);
         if (HealthManager.Instance == null) Debug.LogError("GameManager: HealthManager not found!", this.gameObject);
 
         if (ScoreManager.Instance != null) ScoreManager.Instance.OnScoreChanged += HandleScoreChanged;
         if (HealthManager.Instance != null) HealthManager.Instance.OnPlayerDied += HandlePlayerDied;
 
-        // Ensure game is not paused at start (Time.timeScale might persist from editor or previous scene if not reset)
         Time.timeScale = 1f;
-        _isPaused = false; // Explicitly set paused to false
-        uiManager?.SetPauseMenu(false); // Ensure pause menu is hidden
+        _isPaused = false;
+        uiManager?.SetPauseMenu(false);
+
+        // Start music when the game starts
+        SimpleAudioManager.Instance?.PlayMusic();
 
         StartGame();
     }
 
     void Update()
     {
-        // Handle Pause Input
         if (Input.GetKeyDown(KeyCode.Escape))
         {
-            // Don't allow pausing if game is already over
             if (!_isGameOver)
             {
                 TogglePauseGame();
             }
         }
 
-        // Handle Restart Input (only if game is over)
         if (_isGameOver && Input.GetKeyDown(KeyCode.Space))
         {
             RestartGame();
@@ -77,7 +75,6 @@ public class GameManager : MonoBehaviour
 
     void OnDestroy()
     {
-        // Unsubscribe from events
         if (ScoreManager.Instance != null) ScoreManager.Instance.OnScoreChanged -= HandleScoreChanged;
         if (HealthManager.Instance != null) HealthManager.Instance.OnPlayerDied -= HandlePlayerDied;
     }
@@ -85,21 +82,25 @@ public class GameManager : MonoBehaviour
     public void StartGame()
     {
         _isGameOver = false;
-        // _isPaused should already be false here from Start() or TogglePauseGame()
         _currentGameSpeed = initialGameSpeed;
         _lastSpeedIncreaseScore = 0;
 
-        Time.timeScale = 1f; // Ensure game is running
+        Time.timeScale = 1f;
 
         HealthManager.Instance?.ResetHealth();
         ScoreManager.Instance?.ResetScore();
 
         uiManager?.HideGameOverScreen();
-        uiManager?.SetPauseMenu(false); // Ensure pause menu is hidden at game start/restart
+        uiManager?.SetPauseMenu(false);
         if (ScoreManager.Instance != null) uiManager?.UpdateScore(ScoreManager.Instance.CurrentScore);
         if (HealthManager.Instance != null) uiManager?.UpdateHearts(HealthManager.Instance.maxHealth);
 
         ObjectSpawner.Instance?.StartSpawning();
+
+        // If restarting, ensure music plays (if it was stopped on game over)
+        // SimpleAudioManager.Instance?.PlayMusic(); // Already handled in Start() for initial load.
+                                                  // If AudioManager is DontDestroyOnLoad, this might be needed.
+                                                  // Since it reloads with scene, its own Start will call PlayMusic.
     }
 
     void HandleScoreChanged(int newScore)
@@ -116,52 +117,61 @@ public class GameManager : MonoBehaviour
     {
         _currentGameSpeed += speedIncrement;
         _currentGameSpeed = Mathf.Min(_currentGameSpeed, maxGameSpeed);
-        // Debug.Log("Speed Increased to: " + _currentGameSpeed);
     }
 
     void HandlePlayerDied()
     {
         _isGameOver = true;
-        Time.timeScale = 0f; // Pause game on death
+        Time.timeScale = 0f;
         uiManager?.ShowGameOverScreen(ScoreManager.Instance.CurrentScore);
         ObjectSpawner.Instance?.StopSpawning();
+
+        // Stop the music
+        SimpleAudioManager.Instance?.StopMusic();
     }
 
     public void RestartGame()
     {
         Time.timeScale = 1f;
+        // Music will restart automatically because SimpleAudioManager's Start will run on scene reload
+        // (if it's not DontDestroyOnLoad and is part of the reloaded scene).
+        // If you want music to start *before* this scene fully loads for the next session,
+        // you might call PlayMusic() here, but it's usually handled by the AudioManager's own lifecycle.
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
-    // --- Pause Logic ---
     public void TogglePauseGame()
     {
         _isPaused = !_isPaused;
-
         if (_isPaused)
         {
-            Time.timeScale = 0f; // Freeze game time
+            Time.timeScale = 0f;
             uiManager?.SetPauseMenu(true);
-            // Optionally disable player input here if not handled by Time.timeScale
+            SimpleAudioManager.Instance?.audioSource.Pause(); // Pause AudioSource directly
         }
         else
         {
-            ResumeGame(); // Call ResumeGame to ensure UI is also handled
+            Time.timeScale = 1f;
+            uiManager?.SetPauseMenu(false);
+            SimpleAudioManager.Instance?.audioSource.UnPause(); // UnPause AudioSource
         }
     }
 
-    public void ResumeGame() // Public method for Resume button
+    public void ResumeGame()
     {
         _isPaused = false;
-        Time.timeScale = 1f; // Unfreeze game time
+        Time.timeScale = 1f;
         uiManager?.SetPauseMenu(false);
-        // Optionally re-enable player input if disabled separately
+        SimpleAudioManager.Instance?.audioSource.UnPause(); // Ensure music resumes from pause
     }
 
-    public void QuitToMainMenu() // Public method for Quit button
+    public void QuitToMainMenu()
     {
-        Time.timeScale = 1f; // IMPORTANT: Always reset time scale before loading a new scene
-        _isPaused = false; // Reset pause state
+        Time.timeScale = 1f;
+        _isPaused = false;
+        // Optionally stop music here if the main menu has its own,
+        // or if AudioManager is DontDestroyOnLoad and you want a clean slate.
+        // SimpleAudioManager.Instance?.StopMusic();
         SceneManager.LoadScene(mainMenuSceneName);
     }
 

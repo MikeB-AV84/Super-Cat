@@ -1,22 +1,27 @@
 using UnityEngine;
-using UnityEngine.UI;     // For Image/RawImage if used for hearts, and Button
+using UnityEngine.UI;     // For Image/RawImage, Button
+using UnityEngine.Video;  // Required for VideoPlayer
 using TMPro;              // For TextMeshPro elements
-using UnityEngine.EventSystems; // For Event Triggers (hover effects)
+using UnityEngine.EventSystems;
 
 public class UIManager : MonoBehaviour
 {
     [Header("Game UI Elements")]
     public TextMeshProUGUI scoreText;
-    public Image[] heartIcons; // Or RawImage[] if you used that for 3D hearts
+    public Image[] heartIcons;
 
     [Header("Game Over UI")]
     public GameObject gameOverPanel;
     public TextMeshProUGUI finalScoreText;
+    [Tooltip("The RawImage UI element used to display the game over video.")]
+    public RawImage gameOverVideoDisplay; // Assign the RawImage for video output
+    [Tooltip("The VideoPlayer component that will play the game over video.")]
+    public VideoPlayer gameOverVideoPlayer; // Assign the VideoPlayer component
 
     [Header("Pause Menu UI")]
     public GameObject pauseMenuPanel;
-    public Button resumeButton; // Assign in Inspector
-    public Button quitToMenuButton; // Assign in Inspector
+    public Button resumeButton;
+    public Button quitToMenuButton;
 
     private Vector3 initialResumeButtonScale;
     private Vector3 initialQuitToMenuButtonScale;
@@ -24,6 +29,7 @@ public class UIManager : MonoBehaviour
 
     void Awake()
     {
+        // Null checks for existing UI elements...
         if (scoreText == null) Debug.LogError("UIManager: ScoreText not assigned!", this.gameObject);
         if (gameOverPanel == null) Debug.LogError("UIManager: GameOverPanel not assigned!", this.gameObject);
         if (finalScoreText == null) Debug.LogError("UIManager: FinalScoreText not assigned!", this.gameObject);
@@ -31,19 +37,33 @@ public class UIManager : MonoBehaviour
         {
             Debug.LogWarning("UIManager: HeartIcons array is not assigned or is empty.", this.gameObject);
         }
-
-        // Pause Menu UI Checks
         if (pauseMenuPanel == null) Debug.LogError("UIManager: PauseMenuPanel not assigned!", this.gameObject);
         if (resumeButton == null) Debug.LogError("UIManager: ResumeButton not assigned!", this.gameObject);
         if (quitToMenuButton == null) Debug.LogError("UIManager: QuitToMenuButton not assigned!", this.gameObject);
+
+        // Null checks for new video elements
+        if (gameOverVideoDisplay == null) Debug.LogError("UIManager: GameOverVideoDisplay (RawImage) not assigned!", this.gameObject);
+        if (gameOverVideoPlayer == null) Debug.LogError("UIManager: GameOverVideoPlayer not assigned!", this.gameObject);
     }
 
     void Start()
     {
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
-        if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false); // Ensure pause menu is hidden at start
+        if (pauseMenuPanel != null) pauseMenuPanel.SetActive(false);
 
-        // Store initial scales for pause menu buttons
+        // Ensure video is not playing and its display is off if the panel is initially hidden
+        if (gameOverVideoPlayer != null && gameOverVideoPlayer.isPlaying)
+        {
+            gameOverVideoPlayer.Stop();
+        }
+        if (gameOverVideoDisplay != null)
+        {
+            // Hide the RawImage if the VideoPlayer isn't ready or panel is hidden
+            // You might want to control its enabled state along with the gameOverPanel
+             gameOverVideoDisplay.enabled = false;
+        }
+
+
         if (resumeButton != null && resumeButton.transform is RectTransform)
         {
             initialResumeButtonScale = resumeButton.transform.localScale;
@@ -53,7 +73,6 @@ public class UIManager : MonoBehaviour
             initialQuitToMenuButtonScale = quitToMenuButton.transform.localScale;
         }
 
-        // Subscribe to health changes from HealthManager
         if (HealthManager.Instance != null)
         {
             HealthManager.Instance.OnHealthChanged += UpdateHearts;
@@ -64,7 +83,6 @@ public class UIManager : MonoBehaviour
             Debug.LogError("UIManager: HealthManager.Instance is null at Start!", this.gameObject);
         }
 
-        // Initialize score display
         if (ScoreManager.Instance != null && scoreText != null) {
              UpdateScore(ScoreManager.Instance.CurrentScore);
         }
@@ -102,13 +120,54 @@ public class UIManager : MonoBehaviour
 
     public void ShowGameOverScreen(int finalScore)
     {
-        if (gameOverPanel != null) gameOverPanel.SetActive(true);
-        if (finalScoreText != null) finalScoreText.text = "Final Score: " + finalScore;
+        if (gameOverPanel != null)
+        {
+            gameOverPanel.SetActive(true);
+            if (finalScoreText != null) finalScoreText.text = "Final Score: " + finalScore;
+
+            // Handle Video Playback
+            if (gameOverVideoPlayer != null && gameOverVideoDisplay != null)
+            {
+                if (gameOverVideoPlayer.clip != null)
+                {
+                    gameOverVideoDisplay.enabled = true; // Make sure RawImage is visible
+                    gameOverVideoPlayer.Prepare(); // Prepare the video
+                    gameOverVideoPlayer.prepareCompleted += OnGameOverVideoPrepared; // Play when prepared
+                }
+                else
+                {
+                    Debug.LogWarning("UIManager: No Video Clip assigned to GameOverVideoPlayer.", gameOverVideoPlayer);
+                    gameOverVideoDisplay.enabled = false; // Hide if no clip
+                }
+            }
+        }
     }
 
-    public void HideGameOverScreen()
+    private void OnGameOverVideoPrepared(VideoPlayer vp)
+    {
+        vp.prepareCompleted -= OnGameOverVideoPrepared; // Unsubscribe
+        if (gameOverPanel.activeSelf) // Only play if panel is still supposed to be active
+        {
+            vp.Play();
+            Debug.Log("Game Over video started playing.");
+        }
+    }
+
+    public void HideGameOverScreen() // Called by GameManager on RestartGame for example
     {
         if (gameOverPanel != null) gameOverPanel.SetActive(false);
+
+        // Stop and hide video elements
+        if (gameOverVideoPlayer != null)
+        {
+            gameOverVideoPlayer.Stop();
+            // Unsubscribe in case it was preparing but didn't finish
+            gameOverVideoPlayer.prepareCompleted -= OnGameOverVideoPrepared;
+        }
+        if (gameOverVideoDisplay != null)
+        {
+            gameOverVideoDisplay.enabled = false;
+        }
     }
 
     // --- Pause Menu Methods ---
@@ -120,20 +179,17 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    // Called by Resume Button's OnClick event (configured in Inspector)
     public void OnResumeButtonPressed()
     {
         GameManager.Instance?.ResumeGame();
     }
 
-    // Called by Quit to Menu Button's OnClick event (configured in Inspector)
     public void OnQuitToMenuButtonPressed()
     {
         GameManager.Instance?.QuitToMainMenu();
     }
 
     // --- Pause Menu Button Hover Effects ---
-    // Assign these to Event Triggers (PointerEnter, PointerExit) on the buttons
     public void OnResumeButtonHoverEnter()
     {
         if (resumeButton != null && resumeButton.transform is RectTransform)

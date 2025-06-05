@@ -132,8 +132,9 @@ GameObject:
   - component: {fileID: 233117161}
   - component: {fileID: 233117160}
   - component: {fileID: 233117159}
+  - component: {fileID: 233117162}
   m_Layer: 0
-  m_Name: Popo-AnimationSheet_0
+  m_Name: Player_SuperCat
   m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -294,7 +295,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5be5f462d41bb804a818f0e91688a13e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  laneChangeSpeed: 10
+  laneChangeSpeed: 12
+--- !u!95 &233117162
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 233117156}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 7f5a560c3bd54ed44bd57e802be6de00, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
 --- !u!1 &379050318
 GameObject:
   m_ObjectHideFlags: 0

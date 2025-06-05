@@ -953,7 +953,7 @@ MonoBehaviour:
   obstacleSpawnRateRange: {x: 1, y: 4}
   spawnXPosition: 12
   minTimeBetweenAnySpawn: 0.2
-  laneSpecificCooldownDuration: 0.1
+  laneSpecificCooldownDuration: 0.5
 --- !u!4 &741618177
 Transform:
   m_ObjectHideFlags: 0

@@ -14,10 +14,10 @@ GameObject:
   - component: {fileID: 1881619557266500392}
   - component: {fileID: 7104882881135283144}
   - component: {fileID: 6837174033641298256}
-  - component: {fileID: 7504415804761346793}
   - component: {fileID: 5679746392984351047}
+  - component: {fileID: 7656782079369071645}
   m_Layer: 0
-  m_Name: Bomb
+  m_Name: Brocoli
   m_TagString: Obstacle
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -144,20 +144,6 @@ Rigidbody2D:
   m_SleepingMode: 1
   m_CollisionDetection: 0
   m_Constraints: 0
---- !u!114 &7504415804761346793
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8040440666046068603}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cb93cdcf217a27742b2b894b54fbee35, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  rotationSpeed: 50
-  rotateClockwise: 1
 --- !u!61 &5679746392984351047
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -204,3 +190,16 @@ BoxCollider2D:
   m_AutoTiling: 0
   m_Size: {x: 0.06815638, y: 0.08818184}
   m_EdgeRadius: 0
+--- !u!114 &7656782079369071645
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8040440666046068603}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0f597bcb1ca0557448faff9dc0d1bce3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  rotationSpeed: 30

@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 6837174033641298256}
   - component: {fileID: 5679746392984351047}
   - component: {fileID: 7656782079369071645}
+  - component: {fileID: -2804070652858679693}
   m_Layer: 0
   m_Name: Brocoli
   m_TagString: Obstacle
@@ -203,3 +204,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rotationSpeed: 60
+--- !u!114 &-2804070652858679693
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8040440666046068603}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cb93cdcf217a27742b2b894b54fbee35, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  rotationSpeed: 50
+  rotateClockwise: 1
